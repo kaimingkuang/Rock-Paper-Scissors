@@ -1,7 +1,7 @@
 import numpy as np
 
 
-class MarkovMomentumAgent:
+class MyAgent:
 
     def __init__(self, momentum, mem_len):
         self.momentum = momentum        # memory momentum
@@ -48,8 +48,8 @@ class MarkovMomentumAgent:
         # else just pick the most probable act
         return int((max_act[0] + 1) % 3)
 
-    def act(self, observation, configuration):
-        oppo_last_move = observation.get("lastOpponentAction")
+    def act(self, obs, cfg):
+        oppo_last_move = obs.get("lastOpponentAction")
         # act randomly if it's the first round
         if oppo_last_move is None:
             self.last_move = np.random.randint(0, 3)
@@ -77,8 +77,8 @@ class MarkovMomentumAgent:
         return self.last_move
 
 
-my_agent = MarkovMomentumAgent(0.9, 2)
+my_agent = MyAgent(0.9, 2)
 
 
-def rps_play(observation, configuration):
+def play_rps(observation, configuration):
     return my_agent.act(observation, configuration)
