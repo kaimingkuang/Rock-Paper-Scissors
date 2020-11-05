@@ -42,10 +42,10 @@ class RPSAgent:
             else:
                 pass
         if len(max_act) > 1:
-            return int(np.random.choice(max_act))
+            return int((np.random.choice(max_act) + 1) % 3)
 
         # else just pick the most probable act
-        return max_act[0]
+        return int((max_act[0] + 1) % 3)
 
     def act(self, observation, configuration):
         oppo_last_move = observation.get("lastOpponentAction")
