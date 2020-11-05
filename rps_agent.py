@@ -1,7 +1,7 @@
 import numpy as np
 
 
-class RPSAgent:
+class MarkovMomentumAgent:
 
     def __init__(self, momentum, mem_len):
         self.momentum = momentum        # memory momentum
@@ -27,6 +27,7 @@ class RPSAgent:
                 + (1 - self.momentum)
 
     def _search_markov_chain(self, cur_memory):
+        # if no such memory found, act randomly
         if self.markov_chain.get(cur_memory) is None:
             return np.random.randint(0, 3)
 
@@ -76,19 +77,8 @@ class RPSAgent:
         return self.last_move
 
 
-rps_agent = RPSAgent(0.9, 2)
+my_agent = MarkovMomentumAgent(0.9, 2)
 
 
 def rps_play(observation, configuration):
-    return rps_agent.act(observation, configuration)
-
-
-# if __name__ == "__main__":
-#     for i in range(100):
-#         if i == 0:
-#             rps_play({}, None)
-#         else:
-#             rps_play({"lastOpponentAction": np.random.randint(0, 3)}, None)
-
-#         print("=" * 16, f"Round {i + 1}", "=" * 16)
-#         print(rps_agent.markov_chain)
+    return my_agent.act(observation, configuration)
