@@ -150,7 +150,7 @@ class MarkovDynamicMomentum(MarkovMomentum):
 
         return self.last_move
 
-my_agent = MarkovMomentum(0.5, 2)
+my_agent = MarkovMomentum(0.5, 2, decision="softmax")
 
 
 def play_rps(observation, configuration):
