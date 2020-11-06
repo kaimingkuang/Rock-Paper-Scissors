@@ -1,13 +1,14 @@
 import numpy as np
 from kaggle_environments.envs.rps.utils import get_score
-from scipy.special import expit
+from scipy.special import expit, softmax
 
 
 class MarkovMomentum:
 
-    def __init__(self, momentum, mem_len):
+    def __init__(self, momentum, mem_len, decision="hard"):
         self.momentum = momentum        # memory momentum
         self.mem_len = mem_len          # memory length
+        self.decision = decision
         self.markov_chain = {}          # markov chain status graph
         self.last_move = None           # agent's last move
         self.cur_memory = []            # current memory
@@ -44,11 +45,22 @@ class MarkovMomentum:
                 max_act.append(k)
             else:
                 pass
-        if len(max_act) > 1:
-            return int((np.random.choice(max_act) + 1) % 3)
 
-        # else just pick the most probable act
-        return int((max_act[0] + 1) % 3)
+        if self.decision == "hard":
+            if len(max_act) > 1:
+                return int((np.random.choice(max_act) + 1) % 3)
+            else:
+                return int((max_act[0] + 1) % 3)
+        elif self.decision == "soft":
+            cnts = np.array(list(self.markov_chain[cur_memory].values()))
+            probs = cnts / cnts.sum()
+            return int((np.random.choice(
+                list(self.markov_chain[cur_memory].keys()), p=probs) + 1) % 3)
+        else:
+            cnts = np.array(list(self.markov_chain[cur_memory].values()))
+            probs = softmax(cnts / cnts.sum())
+            return int((np.random.choice(
+                list(self.markov_chain[cur_memory].keys()), p=probs) + 1) % 3)
 
     def act(self, obs, cfg):
         oppo_last_move = obs.get("lastOpponentAction")
@@ -138,7 +150,7 @@ class MarkovDynamicMomentum(MarkovMomentum):
 
         return self.last_move
 
-my_agent = MarkovMomentum(0.9, 2)
+my_agent = MarkovMomentum(0.5, 2)
 
 
 def play_rps(observation, configuration):
