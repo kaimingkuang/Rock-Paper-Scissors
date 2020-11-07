@@ -31,8 +31,8 @@ class MarkovMomentum(BaseAgent):
         if oppo_move is not None:
             self.history.append((self_move, oppo_move))
 
-        if len(self.history) <= self.mem_len:
-            self._update_markov_chain(self._make_markov_key(self.history[:-1]),
+        if len(self.history) > self.mem_len:
+            self._update_markov_chain(self._make_markov_key(self.history[-3:-1]),
                 oppo_move)
 
     def _update_markov_chain(self, cur_memory_key, oppo_last_move):
