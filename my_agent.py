@@ -188,6 +188,9 @@ class YouGoFirst(BaseAgent):
         self.t_wait = t_wait
         self.history = []
         self.last_move = None
+        self.pred_move = 0
+        self.recent_pred_v_oppo = []
+        self.recent_score = 0
         self.markov_matrix = np.zeros((3, 3, 3))
         self.rand_markov_matrix = np.ones(3) / 3
     
@@ -208,6 +211,14 @@ class YouGoFirst(BaseAgent):
 
         if len(self.history) >= 2:
             self._update_markov_matrix()
+            if len(self.recent_pred_v_oppo) > 10:
+                self.recent_pred_v_oppo.pop(0)
+            self.recent_pred_v_oppo.append(
+                get_score(self.pred_move, oppo_move))
+            self.recent_score = sum(self.recent_pred_v_oppo)
+            self.pred_move = (np.argmax(self.markov_matrix[
+                self.history[-1][0], self.history[-1][1]
+                ]) + 1) % 3
 
     def decide(self, obs, cfg):
         if len(self.history) >= self.t_wait:
@@ -217,7 +228,7 @@ class YouGoFirst(BaseAgent):
             ]
             cond_prob /= cond_prob.sum()
             sce = symmetric_cross_entropy(cond_prob, self.rand_markov_matrix)
-            if sce >= self.sce_thresh:
+            if sce >= self.sce_thresh and self.recent_score >= 0:
                 return int((np.argmax(cond_prob) + 1) % 3)
             else:
                 return np.random.randint(0, 3)
