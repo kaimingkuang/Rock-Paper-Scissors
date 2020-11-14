@@ -54,7 +54,6 @@ class UniMarkovAgent(BaseAgent):
 
     def _update_markov_chain(self):
         memory_key = (self.history[-2][1], self.history[-1][1])
-        # self.markov_chain[memory_key[:-1]] *= self.momentum
         self.markov_chain *= self.momentum
         self.markov_chain[memory_key] += 1 - self.momentum
 
@@ -118,7 +117,6 @@ class BiMarkovAgent(UniMarkovAgent):
     def _update_markov_chain(self):
         memory_key = (self.history[-2][0], self.history[-2][1],
             self.history[-1][1])
-        # self.markov_chain[memory_key[:-1]] *= self.momentum
         self.markov_chain *= self.momentum
         self.markov_chain[memory_key] += 1 - self.momentum
 
@@ -179,18 +177,3 @@ my_agent = MetaAgent([
 
 def play_rps(observation, configuration):
     return my_agent.act(observation, configuration)
-
-
-# if __name__ == "__main__":
-#     my_agent = MetaAgent([
-#         RandomAgent(),
-#         UniMarkovAgent(0.5, 1),
-#         UniMarkovAgent(0.5, 2),
-#         UniMarkovAgent(0.5, 3),
-#         BiMarkovAgent(0.5, 1),
-#         BiMarkovAgent(0.5, 2),
-#         BiMarkovAgent(0.5, 3),
-#     ], 0.9)
-#     for i in range(100):
-#         obs = {"lastOpponentAction": None if i == 0 else np.random.randint(0, 3)}
-#         my_agent.act(obs, None)
