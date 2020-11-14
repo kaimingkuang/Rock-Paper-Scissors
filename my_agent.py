@@ -1,24 +1,15 @@
+from itertools import chain
+
 import numpy as np
 
 
 def get_score(x, y):
     score = np.where((x - y) % 2 != 0, x - y, np.sign(y - x))
-    
+
     return score
 
 
-def kl_divergence(p0, p1):
-    return -p0 * np.log(p1 / (p0 + 1e-8))
-
-
-def symmetric_cross_entropy(p0, p1):
-    return (kl_divergence(p0, p1) + kl_divergence(p1, p0)).mean()
-
-
 class BaseAgent:
-
-    def __init__(self, *args, **kwargs):
-        self.history = []
 
     def update_history(self, self_move, oppo_move):
         raise NotImplementedError
@@ -39,76 +30,57 @@ class BaseAgent:
         return score
 
 
-class MarkovMomentum(BaseAgent):
+class MarkovAgent(BaseAgent):
 
-    def __init__(self, momentum, mem_len):
-        self.momentum = momentum
+    def __init__(self, mem_len, shift):
         self.mem_len = mem_len
+        self.shift = shift
         self.history = []
-        self.markov_chain = {}
+        markov_chain_shape = tuple([3] * (mem_len * 2 + 1))
+        self.markov_chain = np.zeros(markov_chain_shape)
         self.last_move = None
 
-    @staticmethod
-    def _make_markov_key(cur_memory):
-        return ",".join([repr(x) for x in cur_memory])
-    
     def update_history(self, self_move, oppo_move):
         if oppo_move is not None:
             self.history.append((self_move, oppo_move))
 
         if len(self.history) > self.mem_len:
-            self._update_markov_chain(self._make_markov_key(self.history[-3:-1]),
-                oppo_move)
+            self._update_markov_chain()
 
-    def _update_markov_chain(self, cur_memory_key, oppo_last_move):
-        if self.markov_chain.get(cur_memory_key) is None:
-            self.markov_chain[cur_memory_key] = {
-                oppo_last_move: self.momentum * 1.0
-            }
-        else:
-            for k, v in self.markov_chain[cur_memory_key].items():
-                self.markov_chain[cur_memory_key][k] = v * self.momentum
-            self.markov_chain[cur_memory_key][oppo_last_move] =\
-                self.markov_chain[cur_memory_key].get(oppo_last_move, 0)\
-                + (1 - self.momentum)
+    def _get_memory_idx(self):
+        return tuple(chain(*self.history[-(self.mem_len + 1):-1],
+            (self.history[-1][1],)))
 
-    def _search_markov_chain(self, cur_memory):
+    def _update_markov_chain(self):
+        memory_idx = self._get_memory_idx()
+        self.markov_chain[memory_idx] += 1
+
+    def _search_markov_chain(self):
         # if no such memory found, act randomly
-        if self.markov_chain.get(cur_memory) is None:
+        memory_idx = self._get_memory_idx()[:-1]
+        if np.all(self.markov_chain[memory_idx] == 0):
             return np.random.randint(0, 3)
 
-        # if there is a tie between two acts, choose randomly between them
-        max_cnt = 0
-        max_act = []
-        for k, v in self.markov_chain[cur_memory].items():
-            if v > max_cnt:
-                max_cnt = v
-                max_act = [k]
-            elif v == max_act:
-                max_act.append(k)
-            else:
-                pass
+        max_prob = np.max(self.markov_chain[memory_idx])
+        if np.sum(self.markov_chain[memory_idx] == max_prob) > 1:
+            rnd_move = np.random.choice(np.argwhere(
+                self.markov_chain[memory_idx] == max_prob).squeeze().tolist())
+            return int((rnd_move + self.shift) % 3)
 
-        if len(max_act) > 1:
-            return int((np.random.choice(max_act) + 1) % 3)
-        else:
-            return int((max_act[0] + 1) % 3)
-    
+        return int((np.argmax(self.markov_chain[memory_idx]) + self.shift) % 3)
+
     def decide(self, obs, cfg):
         oppo_last_move = obs.get("lastOpponentAction")
         # act randomly if it's the first round
         if oppo_last_move is None:
-            self.last_move = np.random.randint(0, 3)
-            return self.last_move
+            return np.random.randint(0, 3)
 
         # if the current history is too short, act randomly
         if len(self.history) <= self.mem_len:
-            self.last_move = np.random.randint(0, 3)
-            return self.last_move
+            return np.random.randint(0, 3)
 
         # search for appropriate act in the markov chain
-        decision = self._search_markov_chain(self._make_markov_key(
-            self.history[-2:]))
+        decision = self._search_markov_chain()
 
         return decision
 
@@ -180,70 +152,7 @@ class MetaAgent(BaseAgent):
         return self.last_move
 
 
-class YouGoFirst(BaseAgent):
-
-    def __init__(self, momentum, sce_thresh, t_wait):
-        self.momentum = momentum 
-        self.sce_thresh = sce_thresh
-        self.t_wait = t_wait
-        self.history = []
-        self.last_move = None
-        self.pred_move = 0
-        self.recent_pred_v_oppo = []
-        self.recent_score = 0
-        self.markov_matrix = np.zeros((3, 3, 3))
-        self.rand_markov_matrix = np.ones(3) / 3
-    
-    def _update_markov_matrix(self):
-        self.markov_matrix[self.history[-2][0], self.history[-2][1]] =\
-            self.markov_matrix[self.history[-2][0], self.history[-2][1]]\
-            * self.momentum
-
-        self.markov_matrix[
-            self.history[-2][0],
-            self.history[-2][1],
-            self.history[-1][1]
-        ] += (1 - self.momentum)
-
-    def update_history(self, self_move, oppo_move):
-        if oppo_move is not None:
-            self.history.append((self_move, oppo_move))
-
-        if len(self.history) >= 2:
-            self._update_markov_matrix()
-            if len(self.recent_pred_v_oppo) > 10:
-                self.recent_pred_v_oppo.pop(0)
-            self.recent_pred_v_oppo.append(
-                get_score(self.pred_move, oppo_move))
-            self.recent_score = sum(self.recent_pred_v_oppo)
-            self.pred_move = (np.argmax(self.markov_matrix[
-                self.history[-1][0], self.history[-1][1]
-                ]) + 1) % 3
-
-    def decide(self, obs, cfg):
-        if len(self.history) >= self.t_wait:
-            cond_prob = self.markov_matrix[
-                self.history[-1][0],
-                self.history[-1][1]
-            ]
-            cond_prob /= cond_prob.sum()
-            sce = symmetric_cross_entropy(cond_prob, self.rand_markov_matrix)
-            if sce >= self.sce_thresh and self.recent_score >= 0:
-                return int((np.argmax(cond_prob) + 1) % 3)
-            else:
-                return np.random.randint(0, 3)
-        else:
-            return np.random.randint(0, 3)
-
-    def act(self, obs, cfg):
-        self.update_history(self.last_move, obs.get("lastOpponentAction"))
-        self.last_move = self.decide(obs, cfg)
-
-        return self.last_move
-
-
-# my_agent = MetaAgent([RandomAgent(), MarkovMomentum(0.5, 2)], 20)
-my_agent = YouGoFirst(0.5, 0.2, 100)
+my_agent = MarkovAgent(2, 1)
 
 
 def play_rps(observation, configuration):
