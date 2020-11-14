@@ -54,7 +54,8 @@ class UniMarkovAgent(BaseAgent):
 
     def _update_markov_chain(self):
         memory_key = (self.history[-2][1], self.history[-1][1])
-        self.markov_chain[memory_key[:-1]] *= self.momentum
+        # self.markov_chain[memory_key[:-1]] *= self.momentum
+        self.markov_chain *= self.momentum
         self.markov_chain[memory_key] += 1 - self.momentum
 
     def update_history(self, oppo_move):
@@ -93,7 +94,7 @@ class UniMarkovAgent(BaseAgent):
         decision = self.decide()
 
         return decision
-    
+
     def get_recent_score(self, momentum):
         if not hasattr(self, "recent_score"):
             self.recent_score = 0
@@ -117,7 +118,8 @@ class BiMarkovAgent(UniMarkovAgent):
     def _update_markov_chain(self):
         memory_key = (self.history[-2][0], self.history[-2][1],
             self.history[-1][1])
-        self.markov_chain[memory_key[:-1]] *= self.momentum
+        # self.markov_chain[memory_key[:-1]] *= self.momentum
+        self.markov_chain *= self.momentum
         self.markov_chain[memory_key] += 1 - self.momentum
 
     def decide(self):
@@ -172,7 +174,7 @@ my_agent = MetaAgent([
     BiMarkovAgent(0.5, 1),
     BiMarkovAgent(0.5, 2),
     BiMarkovAgent(0.5, 3),
-], 0.9)
+], 0.8)
 
 
 def play_rps(observation, configuration):
