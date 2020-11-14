@@ -23,19 +23,25 @@ class BaseAgent:
 
 class RandomAgent(BaseAgent):
 
-    def update_history(self, oppo_move):
-        pass
+    def __init__(self):
+        self.history = []
 
-    def decide(self, obs, cfg):
-        return np.random.randint(0, 3)
+    def update_history(self, oppo_move):
+        self.history[-1] = (self.history[-1], oppo_move)
+
+    def decide(self):
+        decision = np.random.randint(0, 3)
+        self.history.append(decision)
+
+        return decision
 
     def act(self, obs, cfg):
-        self.last_move = self.decide(obs, cfg)
+        decision = self.decide(obs, cfg)
 
-        return self.last_move
-
-    def cal_latest_score(self, hist_len):
-        return 0.5
+        return decision
+    
+    def get_recent_score(self, momentum):
+        return 0
 
 
 class UniMarkovAgent(BaseAgent):
@@ -87,6 +93,17 @@ class UniMarkovAgent(BaseAgent):
         decision = self.decide()
 
         return decision
+    
+    def get_recent_score(self, momentum):
+        if not hasattr(self, "recent_score"):
+            self.recent_score = 0
+        else:
+            last_match_score = get_score(self.history[-1][0],
+                self.history[-1][1])
+            self.recent_score = self.recent_score * momentum\
+                + (1 - momentum) * last_match_score
+        
+        return self.recent_score
 
 
 class BiMarkovAgent(UniMarkovAgent):
@@ -121,35 +138,57 @@ class MetaAgent(BaseAgent):
     def __init__(self, agents, momentum):
         self.agents = agents
         self.momentum = momentum
-        self.last_move = None
+        self.history = []
 
-    def update_history(self, self_move, oppo_move):
-        for i in range(len(self.agents)):
-            self.agents[i].update_history(self.agents[i].last_move, oppo_move)
+    def update_history(self, oppo_move):
+        if oppo_move is not None:
+            self.history[-1] = (self.history[-1], oppo_move)
+            for i in range(len(self.agents)):
+                self.agents[i].update_history(oppo_move)
 
-    def decide(self, obs, cfg):
-        for i in range(len(self.agents)):
-            self.agents[i].last_move = self.agents[i].decide(obs, cfg)
-
-        recent_scores = [self.agents[i].cal_latest_score(self.recent_hist_len)
+    def decide(self):
+        recent_scores = [self.agents[i].get_recent_score(self.momentum)
             for i in range(len(self.agents))]
-        cur_best_agent = self.agents[np.argmax(recent_scores)]
+        for i in range(len(self.agents)):
+            self.agents[i].decide()
+        decision = self.agents[np.argmax(recent_scores)].history[-1]
+        self.history.append(decision)
 
-        return cur_best_agent.last_move
+        return decision
 
     def act(self, obs, cfg):
-        self.update_history(self.last_move, obs.get("lastOpponentAction"))
-        self.last_move = self.decide(obs, cfg)
+        oppo_move = obs.get("lastOpponentAction")
+        self.update_history(oppo_move)
+        decision = self.decide()
 
-        return self.last_move
-
-
-# def play_rps(observation, configuration):
-#     return my_agent.act(observation, configuration)
+        return decision
 
 
-if __name__ == "__main__":
-    my_agent = BiMarkovAgent(0.9, 1)
-    for i in range(100):
-        obs = {"lastOpponentAction": None if i == 0 else np.random.randint(0, 3)}
-        my_agent.act(obs, None)
+my_agent = MetaAgent([
+    RandomAgent(),
+    UniMarkovAgent(0.5, 1),
+    UniMarkovAgent(0.5, 2),
+    UniMarkovAgent(0.5, 3),
+    BiMarkovAgent(0.5, 1),
+    BiMarkovAgent(0.5, 2),
+    BiMarkovAgent(0.5, 3),
+], 0.9)
+
+
+def play_rps(observation, configuration):
+    return my_agent.act(observation, configuration)
+
+
+# if __name__ == "__main__":
+#     my_agent = MetaAgent([
+#         RandomAgent(),
+#         UniMarkovAgent(0.5, 1),
+#         UniMarkovAgent(0.5, 2),
+#         UniMarkovAgent(0.5, 3),
+#         BiMarkovAgent(0.5, 1),
+#         BiMarkovAgent(0.5, 2),
+#         BiMarkovAgent(0.5, 3),
+#     ], 0.9)
+#     for i in range(100):
+#         obs = {"lastOpponentAction": None if i == 0 else np.random.randint(0, 3)}
+#         my_agent.act(obs, None)
