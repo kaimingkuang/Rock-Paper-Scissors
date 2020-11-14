@@ -38,11 +38,10 @@ class MarkovAgent(BaseAgent):
         self.history = []
         markov_chain_shape = tuple([3] * (mem_len * 2 + 1))
         self.markov_chain = np.zeros(markov_chain_shape)
-        self.last_move = None
 
-    def update_history(self, self_move, oppo_move):
+    def update_history(self, oppo_move):
         if oppo_move is not None:
-            self.history.append((self_move, oppo_move))
+            self.history[-1] = (self.history[-1], oppo_move)
 
         if len(self.history) > self.mem_len:
             self._update_markov_chain()
@@ -71,21 +70,20 @@ class MarkovAgent(BaseAgent):
 
     def decide(self, obs, cfg):
         oppo_last_move = obs.get("lastOpponentAction")
-        # act randomly if it's the first round
-        if oppo_last_move is None:
-            return np.random.randint(0, 3)
+        if oppo_last_move is None or len(self.history) <= self.mem_len:
+            # act randomly if it's the first few rounds
+            decision = np.random.randint(0, 3)
+        else:
+            # search for appropriate act in the markov chain
+            decision = self._search_markov_chain()
 
-        # if the current history is too short, act randomly
-        if len(self.history) <= self.mem_len:
-            return np.random.randint(0, 3)
-
-        # search for appropriate act in the markov chain
-        decision = self._search_markov_chain()
+        # update the latest decision in history
+        self.history.append(decision)
 
         return decision
 
     def act(self, obs, cfg):
-        self.update_history(self.last_move, obs.get("lastOpponentAction"))
+        self.update_history(obs.get("lastOpponentAction"))
         self.last_move = self.decide(obs, cfg)
 
         return self.last_move
@@ -93,42 +91,26 @@ class MarkovAgent(BaseAgent):
 
 class RandomAgent(BaseAgent):
 
-    def __init__(self, mc_times=100):
-        self.history = []
-        self.mc_times = mc_times
-        self.last_move = None
-
     def update_history(self, self_move, oppo_move):
-        if oppo_move is not None:
-            self.history.append((self_move, oppo_move))
+        pass
 
     def decide(self, obs, cfg):
         return np.random.randint(0, 3)
 
     def act(self, obs, cfg):
-        self.update_history(self.last_move, obs.get("lastOpponentAction"))
         self.last_move = self.decide(obs, cfg)
 
         return self.last_move
 
     def cal_latest_score(self, hist_len):
-        if len(self.history) == 0:
-            return 0
-
-        hist_len = min(hist_len, len(self.history))
-        oppo_plays = np.tile(np.array(self.history[-hist_len:])[:, 1],
-            (self.mc_times, 1))
-        rnd_plays = np.random.randint(0, 3, (self.mc_times, hist_len))
-        score = get_score(rnd_plays, oppo_plays).sum(axis=1).mean()
-
-        return score
+        return 0.5
 
 
 class MetaAgent(BaseAgent):
 
-    def __init__(self, agents, recent_hist_len):
+    def __init__(self, agents, momentum):
         self.agents = agents
-        self.recent_hist_len = recent_hist_len
+        self.momentum = momentum
         self.last_move = None
 
     def update_history(self, self_move, oppo_move):
