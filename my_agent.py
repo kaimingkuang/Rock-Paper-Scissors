@@ -11,87 +11,19 @@ def get_score(x, y):
 
 class BaseAgent:
 
-    def update_history(self, self_move, oppo_move):
-        raise NotImplementedError
-
-    def decide(self, obs, cfg):
-        raise NotImplementedError
-
-    def act(self, obs, cfg):
-        raise NotImplementedError
-
-    def cal_latest_score(self, hist_len):
-        if len(self.history) == 0:
-            return 0
-
-        score = get_score(np.array([x[0] for x in self.history[-hist_len:]]),
-            np.array([x[1] for x in self.history[-hist_len:]])).sum()
-
-        return score
-
-
-class MarkovAgent(BaseAgent):
-
-    def __init__(self, mem_len, shift):
-        self.mem_len = mem_len
-        self.shift = shift
-        self.history = []
-        markov_chain_shape = tuple([3] * (mem_len * 2 + 1))
-        self.markov_chain = np.zeros(markov_chain_shape)
-
     def update_history(self, oppo_move):
-        if oppo_move is not None:
-            self.history[-1] = (self.history[-1], oppo_move)
-
-        if len(self.history) > self.mem_len:
-            self._update_markov_chain()
-
-    def _get_memory_idx(self):
-        return tuple(chain(*self.history[-(self.mem_len + 1):-1],
-            (self.history[-1][1],)))
-
-    def _update_markov_chain(self):
-        memory_idx = self._get_memory_idx()
-        self.markov_chain[memory_idx] += 1
-
-    def _search_markov_chain(self):
-        # if no such memory found, act randomly
-        memory_idx = self._get_memory_idx()[:-1]
-        if np.all(self.markov_chain[memory_idx] == 0):
-            return np.random.randint(0, 3)
-
-        max_prob = np.max(self.markov_chain[memory_idx])
-        if np.sum(self.markov_chain[memory_idx] == max_prob) > 1:
-            rnd_move = np.random.choice(np.argwhere(
-                self.markov_chain[memory_idx] == max_prob).squeeze().tolist())
-            return int((rnd_move + self.shift) % 3)
-
-        return int((np.argmax(self.markov_chain[memory_idx]) + self.shift) % 3)
+        raise NotImplementedError
 
     def decide(self, obs, cfg):
-        oppo_last_move = obs.get("lastOpponentAction")
-        if oppo_last_move is None or len(self.history) <= self.mem_len:
-            # act randomly if it's the first few rounds
-            decision = np.random.randint(0, 3)
-        else:
-            # search for appropriate act in the markov chain
-            decision = self._search_markov_chain()
-
-        # update the latest decision in history
-        self.history.append(decision)
-
-        return decision
+        raise NotImplementedError
 
     def act(self, obs, cfg):
-        self.update_history(obs.get("lastOpponentAction"))
-        self.last_move = self.decide(obs, cfg)
-
-        return self.last_move
+        raise NotImplementedError
 
 
 class RandomAgent(BaseAgent):
 
-    def update_history(self, self_move, oppo_move):
+    def update_history(self, oppo_move):
         pass
 
     def decide(self, obs, cfg):
@@ -105,6 +37,59 @@ class RandomAgent(BaseAgent):
     def cal_latest_score(self, hist_len):
         return 0.5
 
+
+class OpponentMarkovAgent(BaseAgent):
+
+    def __init__(self, momentum, shift):
+        self.momentum = momentum
+        self.shift = shift
+        self.history = []
+        self.markov_chain = np.zeros((3, 3))
+
+    def _get_memory_key(self):
+        return (self.history[-2][1], self.history[-1][1])
+
+    def _update_markov_chain(self):
+        memory_key = self._get_memory_key()
+        self.markov_chain[memory_key[:-1]] *= self.momentum
+        self.markov_chain[memory_key] += 1 - self.momentum
+
+    def update_history(self, oppo_move):
+        if oppo_move is not None:
+            self.history[-1] = (self.history[-1], oppo_move)
+        if len(self.history) >= 2:
+            self._update_markov_chain()
+
+    def _search_markov_chain(self, memory_key):
+        if np.all(self.markov_chain[memory_key] == 0):
+            return np.random.randint(0, 3)
+
+        max_cnt = self.markov_chain[memory_key].max()
+        if (self.markov_chain[memory_key] == max_cnt).sum() > 1:
+            max_oppo_acts = np.argwhere(
+                self.markov_chain[memory_key] == max_cnt).squeeze()
+            return np.random.choice(max_oppo_acts)
+        else:
+            return np.argmax(self.markov_chain[memory_key])
+
+    def decide(self):
+        if len(self.history) < 2:
+            decision = np.random.randint(0, 3)
+        else:
+            memory_key = self._get_memory_key()[-1]
+            decision = self._search_markov_chain(memory_key)
+
+        decision = int((decision + self.shift) % 3)
+        self.history.append(decision)
+
+        return decision
+
+    def act(self, obs, cfg):
+        oppo_move = obs.get("lastOpponentAction")
+        self.update_history(oppo_move)
+        decision = self.decide()
+
+        return decision
 
 class MetaAgent(BaseAgent):
 
@@ -134,8 +119,12 @@ class MetaAgent(BaseAgent):
         return self.last_move
 
 
-my_agent = MarkovAgent(2, 1)
+# def play_rps(observation, configuration):
+#     return my_agent.act(observation, configuration)
 
 
-def play_rps(observation, configuration):
-    return my_agent.act(observation, configuration)
+if __name__ == "__main__":
+    my_agent = OpponentMarkovAgent(0.9, 1)
+    for i in range(100):
+        obs = {"lastOpponentAction": None if i == 0 else np.random.randint(0, 3)}
+        my_agent.act(obs, None)
