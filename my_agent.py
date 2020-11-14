@@ -38,7 +38,7 @@ class RandomAgent(BaseAgent):
         return 0.5
 
 
-class OpponentMarkovAgent(BaseAgent):
+class UniMarkovAgent(BaseAgent):
 
     def __init__(self, momentum, shift):
         self.momentum = momentum
@@ -46,11 +46,8 @@ class OpponentMarkovAgent(BaseAgent):
         self.history = []
         self.markov_chain = np.zeros((3, 3))
 
-    def _get_memory_key(self):
-        return (self.history[-2][1], self.history[-1][1])
-
     def _update_markov_chain(self):
-        memory_key = self._get_memory_key()
+        memory_key = (self.history[-2][1], self.history[-1][1])
         self.markov_chain[memory_key[:-1]] *= self.momentum
         self.markov_chain[memory_key] += 1 - self.momentum
 
@@ -76,7 +73,7 @@ class OpponentMarkovAgent(BaseAgent):
         if len(self.history) < 2:
             decision = np.random.randint(0, 3)
         else:
-            memory_key = self._get_memory_key()[-1]
+            memory_key = self.history[-1][1]
             decision = self._search_markov_chain(memory_key)
 
         decision = int((decision + self.shift) % 3)
@@ -90,6 +87,34 @@ class OpponentMarkovAgent(BaseAgent):
         decision = self.decide()
 
         return decision
+
+
+class BiMarkovAgent(UniMarkovAgent):
+
+    def __init__(self, momentum, shift):
+        self.momentum = momentum
+        self.shift = shift
+        self.history = []
+        self.markov_chain = np.zeros((3, 3, 3))
+
+    def _update_markov_chain(self):
+        memory_key = (self.history[-2][0], self.history[-2][1],
+            self.history[-1][1])
+        self.markov_chain[memory_key[:-1]] *= self.momentum
+        self.markov_chain[memory_key] += 1 - self.momentum
+
+    def decide(self):
+        if len(self.history) < 2:
+            decision = np.random.randint(0, 3)
+        else:
+            memory_key = (self.history[-1][0], self.history[-1][1])
+            decision = self._search_markov_chain(memory_key)
+
+        decision = int((decision + self.shift) % 3)
+        self.history.append(decision)
+
+        return decision
+
 
 class MetaAgent(BaseAgent):
 
@@ -124,7 +149,7 @@ class MetaAgent(BaseAgent):
 
 
 if __name__ == "__main__":
-    my_agent = OpponentMarkovAgent(0.9, 1)
+    my_agent = BiMarkovAgent(0.9, 1)
     for i in range(100):
         obs = {"lastOpponentAction": None if i == 0 else np.random.randint(0, 3)}
         my_agent.act(obs, None)
