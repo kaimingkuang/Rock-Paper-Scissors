@@ -67,7 +67,7 @@ class MarkovAgent(BaseAgent):
         self.markov_chain = np.zeros((3, 3, 3))
 
     def update_markov_chain(self):
-        NotImplementedError
+        raise NotImplementedError
 
     def update_history(self, oppo_move):
         if oppo_move is not None:
